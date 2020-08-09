@@ -16,6 +16,6 @@ if [ ! -f "$HOME/.oh-my-zsh/antigen.zsh" ]; then
 fi
 
 
-grep -qxF 'alias config' ~/.zshrc || echo "alias config='/usr/bin/git --git-dir=$HOME/dotfiles/ --work-tree=$HOME'" >> ~/.zshrc
+grep 'alias config' $HOME/.zshrc || echo "alias config='/usr/bin/git --git-dir=$HOME/dotfiles/ --work-tree=$HOME'" >> ~/.zshrc
 
 
