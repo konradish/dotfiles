@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-if [[ ! -f "~/.zshrc" ]]
-then
+if [ ! -f "$HOME/.zshrc" ]; then
     echo "Installing zsh"
     sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
     sed -i 's/ZSH_THEME="robbyrussell"/ZSH_THEME="agnoster"/g' ~/.zshrc
@@ -11,9 +10,12 @@ then
     source ~/.zshrc
 fi
 
-if [[ ! -f "~/.oh-my-zsh/antigen.zsh" ]]
-then
+if [ ! -f "$HOME/.oh-my-zsh/antigen.zsh" ]; then
     curl -L git.io/antigen > ~/.oh-my-zsh/antigen.zsh
     source ~/.oh-my-zsh/antigen.zsh
 fi
+
+
+grep -qxF 'alias config' ~/.zshrc || echo "alias config='/usr/bin/git --git-dir=$HOME/dotfiles/ --work-tree=$HOME'" >> ~/.zshrc
+
 
