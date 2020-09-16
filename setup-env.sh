@@ -20,8 +20,8 @@ install_plugins() {
   git clone https://github.com/zsh-users/zsh-autosuggestions ~/.oh-my-zsh/custom/plugins/zsh-autosuggestions
   git clone https://github.com/zsh-users/zsh-syntax-highlighting.git ~/.oh-my-zsh/custom/plugins/zsh-syntax-highlighting
   git clone https://github.com/romkatv/powerlevel10k.git ~/.oh-my-zsh/custom/themes/powerlevel10k
-  curl -Lo $HOME/Spaceship10kTheme http://bit.ly/Spaceship10kTheme
-  echo "source ~/Spaceship10kTheme" >~/.zshrc
+  #curl -Lo $HOME/Spaceship10kTheme http://bit.ly/Spaceship10kTheme
+  echo "source ~/dotfiles/Spaceship10kTheme" >~/.zshrc
 }
 
 
@@ -29,13 +29,14 @@ if [ ! -f "$HOME/.zshrc" ]
 then
   #sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
   sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended --skip-chsh
-  install_plugins
   #sed -i 's/ZSH_THEME="robbyrussell"/ZSH_THEME="agnoster"/g' ~/.zshrc
   #cp ./zshrc ~/.zshrc
   #cp ./p10k.zsh ~/.p10k.zsh
   #chsh -s $(which zsh)
   #source ~/.zshrc
 fi
+
+install_plugins
 
 grep 'alias config' $HOME/.zshrc || echo "alias config='/usr/bin/git --git-dir=$HOME/dotfiles/ --work-tree=$HOME'" >> ~/.zshrc
 exec zsh
