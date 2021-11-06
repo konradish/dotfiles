@@ -1,6 +1,9 @@
 # ⚠ Wait
 I use this repo to quickly get my shell set up the way I like. You may not like your shell the way I like my shell, so maybe check out what the setup script does before you run it.
 
+# 🛹 Future
+Right now this is just a setup script. I want to eventually be able to add my dotfiles from my running system into this repo by typing something on the command line. I know there are projects out there that do this. Need to find time to learn how it works.
+
 # Preconfigure
 ## Windows Terminal
 I like to use CaskaydiaCove [Nerd Font](https://www.nerdfonts.com/) size 15, with the Campbell color scheme
