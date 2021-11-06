@@ -6,11 +6,11 @@ if [ "$EUID" -ne 0 ]
 then
   SUDO=sudo
 fi
-
+echo "Updating software packages"
+$SUDO ./pacapt -Sy
 echo "Installing zsh cURL and git dependencies"
 $SUDO ./pacapt install --noconfirm -S zsh git curl
 #echo "Installing autojump"
-#$SUDO ./pacapt install --noconfirm -S autojump-zsh || echo "Autojump not found"
 
 convert_bash_hist() {
   curl -Lo ~/bash-to-zsh-hist.py https://gist.github.com/muendelezaji/c14722ab66b505a49861b8a74e52b274/raw/49f0fb7f661bdf794742257f58950d209dd6cb62/bash-to-zsh-hist.py
@@ -30,13 +30,7 @@ install_plugins() {
 
 if [ ! -f "$HOME/.zshrc" ]
 then
-  #sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)"
   sh -c "$(curl -fsSL https://raw.githubusercontent.com/ohmyzsh/ohmyzsh/master/tools/install.sh)" "" --unattended --skip-chsh
-  #sed -i 's/ZSH_THEME="robbyrussell"/ZSH_THEME="agnoster"/g' ~/.zshrc
-  #cp ./zshrc ~/.zshrc
-  #cp ./p10k.zsh ~/.p10k.zsh
-  #chsh -s $(which zsh)
-  #source ~/.zshrc
 fi
 
 install_plugins
