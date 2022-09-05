@@ -1,0 +1,12 @@
+PATH=$PATH:$HOME/.local/scripts:$HOME/.local/bin
+
+# autocompletion using arrow keys (based on history)
+bindkey '\e[A' history-search-backward
+bindkey '\e[B' history-search-forward
+
+# control arrow keys skip forward/back a word
+bindkey '^[[1;5D' backward-word
+bindkey '^[[1;5C' forward-word
+
+# C-f to open a new tmux session
+bindkey -s ^f "tmux-sessionizer\n"

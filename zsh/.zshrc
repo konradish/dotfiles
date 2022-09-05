@@ -117,6 +117,8 @@ source $ZSH/oh-my-zsh.sh
 # alias zshconfig="mate ~/.zshrc"
 # alias ohmyzsh="mate ~/.oh-my-zsh"
 alias runwar='f(){docker run -it -v $1:/usr/local/tomcat/webapps/app.war -p 8085:8080 tomcat}; f'
+alias vim=nvim
+alias vi=nvim
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
@@ -136,12 +138,10 @@ HISTSIZE=999
 setopt HIST_EXPIRE_DUPS_FIRST
 setopt EXTENDED_HISTORY
 
-# autocompletion using arrow keys (based on history)
-bindkey '\e[A' history-search-backward
-bindkey '\e[B' history-search-forward
-
 
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
+
+source ~/.zsh_profile
 
 # Bun
 export BUN_INSTALL="/home/kodell/.bun"
