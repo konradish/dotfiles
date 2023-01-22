@@ -1,4 +1,4 @@
-PATH=$PATH:$HOME/.local/scripts:$HOME/.local/bin
+PATH=$PATH:$HOME/.local/scripts:$HOME/.local/bin:$HOME/scripts
 
 # autocompletion using arrow keys (based on history)
 bindkey '\e[A' history-search-backward
