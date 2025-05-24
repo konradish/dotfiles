@@ -1,4 +1,4 @@
-zstyle ':znap:*' repos-dir repos
+zstyle ':znap:*' repos-dir ~/.znap-repos
 [[ -f ~/zsh-snap/znap.zsh ]] ||
     git clone --depth 1 -- \
         https://github.com/marlonrichert/zsh-snap.git ~/zsh-snap
@@ -119,6 +119,7 @@ source $ZSH/oh-my-zsh.sh
 alias runwar='f(){docker run -it -v $1:/usr/local/tomcat/webapps/app.war -p 8085:8080 tomcat}; f'
 alias vim=nvim
 alias vi=nvim
+alias sgpt='uvx --from shell-gpt sgpt'
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
@@ -146,3 +147,13 @@ source ~/.zsh_profile
 # Bun
 export BUN_INSTALL="/home/kodell/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
+
+export NVM_DIR="$HOME/.config/nvm"
+[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+
+. "$HOME/.local/share/../bin/env"
+# Load secrets from shared location
+if [ -f "/mnt/c/dev/secrets/.secrets.env" ]; then
+    source "/mnt/c/dev/secrets/.secrets.env"
+fi

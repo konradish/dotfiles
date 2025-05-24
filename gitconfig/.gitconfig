@@ -1,8 +1,13 @@
 [user]
 	email = konradish@gmail.com
 	name = Konrad Odell
-[credential "https://github.com"]
-	helper = 
-	helper = !gh auth git-credential
 [core]
 	autocrlf = input
+[credential "https://github.com"]
+	helper = 
+	helper = !/usr/bin/gh auth git-credential
+[credential]
+	helper = store
+[credential "https://gist.github.com"]
+	helper = 
+	helper = !/usr/bin/gh auth git-credential
