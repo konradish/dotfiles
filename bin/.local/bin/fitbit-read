@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""Fitbit API CLI tool with auto token refresh."""
+"""Fitbit API CLI tool with auto token refresh.
+
+Backends:
+  legacy  — Fitbit Web API (api.fitbit.com), FITBIT_* tokens. Default.
+  google  — Google Health API v4 (health.googleapis.com), GOOGLE_HEALTH_* tokens.
+
+Select with --backend or HEALTH_BACKEND env var. Intraday subcommands
+(hr-intraday, steps-intraday, energy-intraday, dump) always use google —
+they are new capabilities of the v4 API.
+"""
 
 import argparse
 import json
@@ -23,23 +32,27 @@ def load_env():
                 env[key] = value
     return env
 
-def save_tokens(access_token: str, refresh_token: str):
-    """Update tokens in ~/.env file."""
+def _rewrite_env(updates: dict):
+    """Update key=value lines in ~/.env, appending keys that are missing."""
     lines = ENV_FILE.read_text().splitlines() if ENV_FILE.exists() else []
+    remaining = dict(updates)
     new_lines = []
-    updated = {"FITBIT_ACCESS_TOKEN": False, "FITBIT_REFRESH_TOKEN": False}
-
     for line in lines:
-        if line.startswith("FITBIT_ACCESS_TOKEN="):
-            new_lines.append(f"FITBIT_ACCESS_TOKEN={access_token}")
-            updated["FITBIT_ACCESS_TOKEN"] = True
-        elif line.startswith("FITBIT_REFRESH_TOKEN="):
-            new_lines.append(f"FITBIT_REFRESH_TOKEN={refresh_token}")
-            updated["FITBIT_REFRESH_TOKEN"] = True
+        key = line.split("=", 1)[0] if "=" in line else None
+        if key in remaining:
+            new_lines.append(f"{key}={remaining.pop(key)}")
         else:
             new_lines.append(line)
-
+    for key, value in remaining.items():
+        new_lines.append(f"{key}={value}")
     ENV_FILE.write_text("\n".join(new_lines) + "\n")
+
+def save_tokens(access_token: str, refresh_token: str):
+    """Update Fitbit tokens in ~/.env file."""
+    _rewrite_env({
+        "FITBIT_ACCESS_TOKEN": access_token,
+        "FITBIT_REFRESH_TOKEN": refresh_token,
+    })
 
 def refresh_access_token(client_id: str, client_secret: str, refresh_token: str) -> dict:
     """Refresh the access token using refresh token."""
@@ -84,9 +97,191 @@ def get_token(env: dict) -> str:
 
     return access_token
 
-def cmd_today(token: str, args):
+# ── Google Health API v4 backend ────────────────────────────────────
+
+GH_BASE = "https://health.googleapis.com/v4/users/me"
+
+class GoogleHealth:
+    """Google Health API v4 client with one-shot 401 refresh."""
+
+    def __init__(self, env: dict):
+        self.env = env
+        self.token = env.get("GOOGLE_HEALTH_ACCESS_TOKEN", "")
+
+    def _refresh(self):
+        r = requests.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "client_id": self.env["GOOGLE_HEALTH_CLIENT_ID"],
+                "client_secret": self.env["GOOGLE_HEALTH_CLIENT_SECRET"],
+                "refresh_token": self.env["GOOGLE_HEALTH_REFRESH_TOKEN"],
+                "grant_type": "refresh_token",
+            },
+            timeout=15,
+        )
+        if r.status_code != 200:
+            raise Exception(f"Google Health token refresh failed: {r.text}")
+        data = r.json()
+        self.token = data["access_token"]
+        updates = {"GOOGLE_HEALTH_ACCESS_TOKEN": self.token}
+        # Google usually does NOT rotate the refresh token; save it if it does
+        if data.get("refresh_token"):
+            updates["GOOGLE_HEALTH_REFRESH_TOKEN"] = data["refresh_token"]
+        _rewrite_env(updates)
+        print("Google Health token refreshed", file=sys.stderr)
+
+    def req(self, method: str, path: str, params: dict = None, body: dict = None) -> dict:
+        for attempt in (0, 1):
+            r = requests.request(
+                method, f"{GH_BASE}{path}",
+                headers={"Authorization": f"Bearer {self.token}"},
+                params=params, json=body, timeout=20,
+            )
+            if r.status_code == 401 and attempt == 0:
+                self._refresh()
+                continue
+            if r.status_code >= 400:
+                raise Exception(f"Google Health API {r.status_code} on {path}: {r.text[:300]}")
+            return r.json() if r.text else {}
+        return {}
+
+def _day_bounds_utc(date_str: str) -> tuple:
+    """RFC3339 start/end of the local civil day, for rollUp Timestamp ranges."""
+    tz = datetime.now().astimezone().tzinfo
+    start = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=tz)
+    return start.isoformat(), (start + timedelta(days=1)).isoformat()
+
+def gh_daily_rollup(gh: GoogleHealth, data_type: str, date_str: str) -> dict:
+    """One-day dailyRollUp; returns the metric dict of the first window, or {}."""
+    d = datetime.strptime(date_str, "%Y-%m-%d")
+    nxt = d + timedelta(days=1)
+    body = {"range": {
+        "start": {"date": {"year": d.year, "month": d.month, "day": d.day}},
+        "end": {"date": {"year": nxt.year, "month": nxt.month, "day": nxt.day}},
+    }}
+    resp = gh.req("POST", f"/dataTypes/{data_type}/dataPoints:dailyRollUp", body=body)
+    points = resp.get("rollupDataPoints", [])
+    if not points:
+        return {}
+    # metric key is the camelCase data type, the only non-range key
+    for k, v in points[0].items():
+        if k not in ("civilStartTime", "civilEndTime", "startTime", "endTime"):
+            return v
+    return {}
+
+def gh_rollup(gh: GoogleHealth, data_type: str, date_str: str, window_s: int) -> list:
+    start, end = _day_bounds_utc(date_str)
+    body = {"range": {"startTime": start, "endTime": end}, "windowSize": f"{window_s}s"}
+    resp = gh.req("POST", f"/dataTypes/{data_type}/dataPoints:rollUp", body=body)
+    return resp.get("rollupDataPoints", [])
+
+def gh_list_date_metric(gh: GoogleHealth, data_type: str, member: str, date_str: str) -> dict:
+    """Fetch the daily-metric datapoint for one date via a civil-date filter."""
+    nxt = (datetime.strptime(date_str, "%Y-%m-%d") + timedelta(days=1)).strftime("%Y-%m-%d")
+    flt = f'{member}.date >= "{date_str}" AND {member}.date < "{nxt}"'
+    resp = gh.req("GET", f"/dataTypes/{data_type}/dataPoints", params={"filter": flt})
+    points = resp.get("dataPoints", [])
+    if not points:
+        return {}
+    for k, v in points[0].items():
+        if k not in ("name", "dataSource"):
+            return v
+    return {}
+
+def gh_sleep_points(gh: GoogleHealth, date_str: str) -> list:
+    """Sleep datapoints whose civil END date matches date_str (legacy semantics)."""
+    matches, token, pages = [], None, 0
+    while pages < 5:
+        params = {"pageSize": 100}
+        if token:
+            params["pageToken"] = token
+        resp = gh.req("GET", "/dataTypes/sleep/dataPoints", params=params)
+        for p in resp.get("dataPoints", []):
+            iv = p["sleep"]["interval"]
+            end = datetime.strptime(iv["endTime"], "%Y-%m-%dT%H:%M:%SZ")
+            offset_s = int(iv.get("endUtcOffset", "0s").rstrip("s"))
+            civil_end = (end + timedelta(seconds=offset_s)).strftime("%Y-%m-%d")
+            if civil_end == date_str:
+                matches.append(p["sleep"])
+            elif civil_end < date_str:
+                return matches  # list is newest-first; we've gone past the date
+        token = resp.get("nextPageToken")
+        if not token:
+            return matches
+        pages += 1
+    return matches
+
+def _stages_minutes(sleeps: list) -> dict:
+    """Sum stage minutes across sleep points, in legacy key names."""
+    out = {"deep": 0, "light": 0, "rem": 0, "wake": 0}
+    key = {"DEEP": "deep", "LIGHT": "light", "REM": "rem", "AWAKE": "wake",
+           "ASLEEP": "light", "RESTLESS": "wake"}
+    for s in sleeps:
+        for st in s.get("summary", {}).get("stagesSummary", []):
+            k = key.get(st.get("type"))
+            if k:
+                out[k] += int(st.get("minutes", 0))
+    return out
+
+def _sleep_minutes(sleeps: list) -> int:
+    return sum(int(s.get("summary", {}).get("minutesAsleep", 0)) for s in sleeps)
+
+def gh_rhr(gh: GoogleHealth, date_str: str):
+    v = gh_list_date_metric(gh, "daily-resting-heart-rate", "daily_resting_heart_rate", date_str)
+    bpm = v.get("beatsPerMinute")
+    return int(bpm) if bpm is not None else None
+
+def gh_azm(gh: GoogleHealth, date_str: str) -> dict:
+    v = gh_daily_rollup(gh, "active-zone-minutes", date_str)
+    return {
+        "fat_burn": int(v.get("sumInFatBurnHeartZone", 0)),
+        "cardio": int(v.get("sumInCardioHeartZone", 0)),
+        "peak": int(v.get("sumInPeakHeartZone", 0)),
+    }
+
+def gh_activity(gh: GoogleHealth, date_str: str) -> dict:
+    steps = int(gh_daily_rollup(gh, "steps", date_str).get("countSum", 0))
+    kcal = gh_daily_rollup(gh, "active-energy-burned", date_str).get("kcalSum", 0)
+    dist_mm = int(gh_daily_rollup(gh, "distance", date_str).get("millimetersSum", 0))
+    floors_v = gh_daily_rollup(gh, "floors", date_str)
+    floors = next((int(v) for k, v in floors_v.items() if k.endswith("Sum")), 0)
+    return {
+        "steps": steps,
+        # v4 has no total-calories type; this is ACTIVE energy (kcal), lower
+        # than legacy caloriesOut which includes BMR
+        "calories": round(kcal),
+        "distance_km": round(dist_mm / 1_000_000, 2),
+        "floors": floors,
+    }
+
+# ── Command implementations ─────────────────────────────────────────
+
+def cmd_today(token, args):
     """Get today's activity summary."""
     date = args.date or datetime.now().strftime("%Y-%m-%d")
+
+    if isinstance(token, GoogleHealth):
+        gh = token
+        act = gh_activity(gh, date)
+        azm = gh_azm(gh, date)
+        result = {
+            "date": date,
+            "steps": act["steps"],
+            "calories": act["calories"],
+            "restingHeartRate": gh_rhr(gh, date),
+            # v4 has no lightly/fairly/very split; mapped from active zone
+            # minutes (lightly unavailable)
+            "activeMinutes": {
+                "lightly": 0,
+                "fairly": azm["fat_burn"],
+                "very": azm["cardio"] + azm["peak"],
+            },
+            "distance_km": act["distance_km"],
+            "floors": act["floors"],
+        }
+        print(json.dumps(result, indent=2))
+        return
+
     _, data = api_request(f"/1/user/-/activities/date/{date}.json", token)
 
     summary = data.get("summary", {})
@@ -105,9 +300,23 @@ def cmd_today(token: str, args):
     }
     print(json.dumps(result, indent=2))
 
-def cmd_sleep(token: str, args):
+def cmd_sleep(token, args):
     """Get sleep data."""
     date = args.date or datetime.now().strftime("%Y-%m-%d")
+
+    if isinstance(token, GoogleHealth):
+        sleeps = gh_sleep_points(token, date)
+        total = _sleep_minutes(sleeps)
+        result = {
+            "date": date,
+            "totalMinutes": total,
+            "totalHours": round(total / 60, 1),
+            "efficiency": None,  # not exposed by Google Health v4
+            "stages": _stages_minutes(sleeps),
+        }
+        print(json.dumps(result, indent=2))
+        return
+
     _, data = api_request(f"/1.2/user/-/sleep/date/{date}.json", token)
 
     sleep = data.get("summary", {})
@@ -126,9 +335,25 @@ def cmd_sleep(token: str, args):
     }
     print(json.dumps(result, indent=2))
 
-def cmd_heart(token: str, args):
+def cmd_heart(token, args):
     """Get heart rate data."""
     date = args.date or datetime.now().strftime("%Y-%m-%d")
+
+    if isinstance(token, GoogleHealth):
+        azm = gh_azm(token, date)
+        result = {
+            "date": date,
+            "restingHeartRate": gh_rhr(token, date),
+            # active-zone minutes; legacy "Out of Range" has no v4 equivalent
+            "zones": {
+                "Fat Burn": azm["fat_burn"],
+                "Cardio": azm["cardio"],
+                "Peak": azm["peak"],
+            },
+        }
+        print(json.dumps(result, indent=2))
+        return
+
     _, data = api_request(f"/1/user/-/activities/heart/date/{date}/1d.json", token)
 
     hr_data = data.get("activities-heart", [{}])[0].get("value", {})
@@ -140,9 +365,27 @@ def cmd_heart(token: str, args):
     }
     print(json.dumps(result, indent=2))
 
-def cmd_weight(token: str, args):
+def cmd_weight(token, args):
     """Get weight log."""
     date = args.date or datetime.now().strftime("%Y-%m-%d")
+
+    if isinstance(token, GoogleHealth):
+        try:
+            v = gh_daily_rollup(token, "body-weight", date)
+        except Exception:
+            v = {}
+        kg = next((val for k, val in v.items() if "kilogram" in k.lower() or "kg" in k.lower()), None)
+        if kg is not None:
+            print(json.dumps({
+                "date": date,
+                "weight_kg": kg,
+                "weight_lbs": round(float(kg) * 2.205, 1),
+                "bmi": None,
+            }, indent=2))
+        else:
+            print(json.dumps({"date": date, "message": "No weight logged"}, indent=2))
+        return
+
     _, data = api_request(f"/1/user/-/body/log/weight/date/{date}.json", token)
 
     weights = data.get("weight", [])
@@ -158,9 +401,33 @@ def cmd_weight(token: str, args):
         result = {"date": date, "message": "No weight logged"}
     print(json.dumps(result, indent=2))
 
-def cmd_summary(token: str, args):
+def cmd_summary(token, args):
     """Get combined daily summary."""
     date = args.date or datetime.now().strftime("%Y-%m-%d")
+
+    if isinstance(token, GoogleHealth):
+        gh = token
+        act = gh_activity(gh, date)
+        azm = gh_azm(gh, date)
+        sleeps = gh_sleep_points(gh, date)
+        result = {
+            "date": date,
+            "activity": {
+                "steps": act["steps"],
+                "calories": act["calories"],
+                "activeMinutes": azm["fat_burn"] + azm["cardio"] + azm["peak"],
+                "distance_km": act["distance_km"],
+            },
+            "sleep": {
+                "hours": round(_sleep_minutes(sleeps) / 60, 1),
+                "efficiency": None,
+            },
+            "heart": {
+                "restingBPM": gh_rhr(gh, date),
+            },
+        }
+        print(json.dumps(result, indent=2))
+        return
 
     _, activity = api_request(f"/1/user/-/activities/date/{date}.json", token)
     _, sleep = api_request(f"/1.2/user/-/sleep/date/{date}.json", token)
@@ -188,9 +455,128 @@ def cmd_summary(token: str, args):
     }
     print(json.dumps(result, indent=2))
 
+# ── Intraday commands (Google Health only) ─────────────────────────
+
+def _hr_windows(gh: GoogleHealth, date: str, window_s: int) -> list:
+    points = gh_rollup(gh, "heart-rate", date, window_s)
+    return [{
+        "start": p.get("startTime"),
+        "end": p.get("endTime"),
+        "avg_bpm": round(p.get("heartRate", {}).get("beatsPerMinuteAvg", 0), 1),
+        "min_bpm": p.get("heartRate", {}).get("beatsPerMinuteMin"),
+        "max_bpm": p.get("heartRate", {}).get("beatsPerMinuteMax"),
+    } for p in reversed(points)]  # API returns newest-first; emit chronological
+
+def _steps_windows(gh: GoogleHealth, date: str, window_s: int) -> list:
+    points = gh_rollup(gh, "steps", date, window_s)
+    return [{
+        "start": p.get("startTime"),
+        "end": p.get("endTime"),
+        "steps": int(p.get("steps", {}).get("countSum", 0)),
+    } for p in reversed(points)]
+
+def _energy_windows(gh: GoogleHealth, date: str, window_s: int) -> list:
+    points = gh_rollup(gh, "active-energy-burned", date, window_s)
+    return [{
+        "start": p.get("startTime"),
+        "end": p.get("endTime"),
+        "kcal": round(p.get("activeEnergyBurned", {}).get("kcalSum", 0), 2),
+    } for p in reversed(points)]
+
+def cmd_hr_intraday(gh: GoogleHealth, args):
+    """Intraday heart rate windows for one day."""
+    date = args.date or datetime.now().strftime("%Y-%m-%d")
+    window = args.window or 60
+    points = _hr_windows(gh, date, window)
+    print(json.dumps({
+        "date": date,
+        "window_seconds": window,
+        "count": len(points),
+        "points": points,
+    }, indent=2))
+
+def cmd_steps_intraday(gh: GoogleHealth, args):
+    """Intraday step windows for one day."""
+    date = args.date or datetime.now().strftime("%Y-%m-%d")
+    window = args.window or 900
+    points = [p for p in _steps_windows(gh, date, window) if p["steps"] > 0]
+    print(json.dumps({
+        "date": date,
+        "window_seconds": window,
+        "count": len(points),
+        "points": points,
+    }, indent=2))
+
+def cmd_energy_intraday(gh: GoogleHealth, args):
+    """Intraday active-energy windows for one day."""
+    date = args.date or datetime.now().strftime("%Y-%m-%d")
+    window = args.window or 900
+    points = [p for p in _energy_windows(gh, date, window) if p["kcal"] > 0]
+    print(json.dumps({
+        "date": date,
+        "window_seconds": window,
+        "count": len(points),
+        "points": points,
+    }, indent=2))
+
+def cmd_dump(gh: GoogleHealth, args):
+    """Archive one full day of everything to a JSON file."""
+    date = args.date or datetime.now().strftime("%Y-%m-%d")
+    out_path = args.out
+    if not out_path:
+        print("dump requires --out <path>", file=sys.stderr)
+        sys.exit(1)
+
+    sleeps = gh_sleep_points(gh, date)
+    hrv = gh_list_date_metric(gh, "daily-heart-rate-variability",
+                              "daily_heart_rate_variability", date)
+    dump = {
+        "date": date,
+        "generated_at": datetime.now().astimezone().isoformat(),
+        "source": "google-health-v4",
+        "daily": {
+            "activity": gh_activity(gh, date),
+            "active_zone_minutes": gh_azm(gh, date),
+            "resting_heart_rate": gh_rhr(gh, date),
+            "hrv": {
+                "daily_rmssd": hrv.get("averageHeartRateVariabilityMilliseconds"),
+                "deep_rmssd": hrv.get("deepSleepRootMeanSquareOfSuccessiveDifferencesMilliseconds"),
+                "non_rem_bpm": int(hrv["nonRemHeartRateBeatsPerMinute"]) if hrv.get("nonRemHeartRateBeatsPerMinute") else None,
+                "entropy": hrv.get("entropy"),
+            },
+            "sleep": {
+                "total_minutes": _sleep_minutes(sleeps),
+                "stages_minutes": _stages_minutes(sleeps),
+            },
+        },
+        "intraday": {
+            "heart_rate_60s": _hr_windows(gh, date, 60),
+            "steps_900s": _steps_windows(gh, date, 900),
+            "active_energy_900s": _energy_windows(gh, date, 900),
+        },
+        "raw_sleep_points": sleeps,
+    }
+    Path(out_path).parent.mkdir(parents=True, exist_ok=True)
+    Path(out_path).write_text(json.dumps(dump, indent=2) + "\n")
+    print(json.dumps({
+        "written": str(out_path),
+        "date": date,
+        "bytes": Path(out_path).stat().st_size,
+        "intraday_hr_windows": len(dump["intraday"]["heart_rate_60s"]),
+        "intraday_step_windows": len(dump["intraday"]["steps_900s"]),
+    }, indent=2))
+
+GOOGLE_ONLY_COMMANDS = {"hr-intraday", "steps-intraday", "energy-intraday", "dump"}
+
 def main():
     parser = argparse.ArgumentParser(description="Fitbit API CLI")
     parser.add_argument("--date", "-d", help="Date (YYYY-MM-DD), defaults to today")
+    parser.add_argument("--backend", choices=["legacy", "google"],
+                        default=os.environ.get("HEALTH_BACKEND", "legacy"),
+                        help="API backend (default: legacy Fitbit; or HEALTH_BACKEND env)")
+    parser.add_argument("--window", "-w", type=int,
+                        help="Intraday window size in seconds (hr/steps/energy-intraday)")
+    parser.add_argument("--out", help="Output path (dump)")
 
     subparsers = parser.add_subparsers(dest="command", help="Commands")
     subparsers.add_parser("today", help="Today's activity")
@@ -198,6 +584,10 @@ def main():
     subparsers.add_parser("heart", help="Heart rate data")
     subparsers.add_parser("weight", help="Weight log")
     subparsers.add_parser("summary", help="Combined daily summary")
+    subparsers.add_parser("hr-intraday", help="Intraday heart rate (google)")
+    subparsers.add_parser("steps-intraday", help="Intraday steps (google)")
+    subparsers.add_parser("energy-intraday", help="Intraday active energy (google)")
+    subparsers.add_parser("dump", help="Archive a full day of everything (google)")
 
     args = parser.parse_args()
 
@@ -205,13 +595,25 @@ def main():
         args.command = "summary"
 
     env = load_env()
-    required = ["FITBIT_CLIENT_ID", "FITBIT_CLIENT_SECRET", "FITBIT_ACCESS_TOKEN", "FITBIT_REFRESH_TOKEN"]
+    # ~/.env is a fallback source for the backend switch; explicit flag wins
+    if "HEALTH_BACKEND" not in os.environ and env.get("HEALTH_BACKEND"):
+        if not any(a.startswith("--backend") for a in sys.argv):
+            args.backend = env["HEALTH_BACKEND"]
+
+    use_google = args.backend == "google" or args.command in GOOGLE_ONLY_COMMANDS
+
+    if use_google:
+        required = ["GOOGLE_HEALTH_CLIENT_ID", "GOOGLE_HEALTH_CLIENT_SECRET",
+                    "GOOGLE_HEALTH_ACCESS_TOKEN", "GOOGLE_HEALTH_REFRESH_TOKEN"]
+    else:
+        required = ["FITBIT_CLIENT_ID", "FITBIT_CLIENT_SECRET",
+                    "FITBIT_ACCESS_TOKEN", "FITBIT_REFRESH_TOKEN"]
     missing = [k for k in required if k not in env]
     if missing:
         print(f"Missing env vars: {missing}", file=sys.stderr)
         sys.exit(1)
 
-    token = get_token(env)
+    token = GoogleHealth(env) if use_google else get_token(env)
 
     commands = {
         "today": cmd_today,
@@ -219,6 +621,10 @@ def main():
         "heart": cmd_heart,
         "weight": cmd_weight,
         "summary": cmd_summary,
+        "hr-intraday": cmd_hr_intraday,
+        "steps-intraday": cmd_steps_intraday,
+        "energy-intraday": cmd_energy_intraday,
+        "dump": cmd_dump,
     }
 
     commands[args.command](token, args)
