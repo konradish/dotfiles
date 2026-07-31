@@ -254,6 +254,27 @@ def gh_activity(gh: GoogleHealth, date_str: str) -> dict:
         "floors": floors,
     }
 
+
+def _summary_distance_km(summary: dict) -> float:
+    """Extract total daily distance in KM from a Fitbit activities summary.
+
+    Fitbit's `summary.distances` is a BREAKDOWN, not a list of legs: it contains
+    a "total" entry alongside "tracker", "loggedActivities" and the per-intensity
+    buckets (veryActive / moderatelyActive / lightlyActive / sedentary). Summing
+    the array multiplies the real distance several-fold -- that is the bug that
+    reported ~31.65 km for a 5.4 km day. Take the "total" row (falling back to
+    "tracker", then the largest entry) instead.
+
+    Units are KM: the API returns metric unless an Accept-Language header selects
+    en_US, which this client never sends.
+    """
+    entries = summary.get("distances") or []
+    by_activity = {d.get("activity"): d.get("distance", 0) for d in entries}
+    for key in ("total", "tracker"):
+        if key in by_activity:
+            return round(by_activity[key] or 0, 2)
+    return round(max([d.get("distance", 0) or 0 for d in entries], default=0), 2)
+
 # ── Command implementations ─────────────────────────────────────────
 
 def cmd_today(token, args):
@@ -295,7 +316,7 @@ def cmd_today(token, args):
             "fairly": summary.get("fairlyActiveMinutes", 0),
             "very": summary.get("veryActiveMinutes", 0),
         },
-        "distance_km": round(sum(d.get("distance", 0) for d in summary.get("distances", [])), 2),
+        "distance_km": _summary_distance_km(summary),
         "floors": summary.get("floors", 0),
     }
     print(json.dumps(result, indent=2))
@@ -443,7 +464,7 @@ def cmd_summary(token, args):
             "steps": summary.get("steps", 0),
             "calories": summary.get("caloriesOut", 0),
             "activeMinutes": summary.get("lightlyActiveMinutes", 0) + summary.get("fairlyActiveMinutes", 0) + summary.get("veryActiveMinutes", 0),
-            "distance_km": round(sum(d.get("distance", 0) for d in summary.get("distances", [])), 2),
+            "distance_km": _summary_distance_km(summary),
         },
         "sleep": {
             "hours": round(sleep_summary.get("totalMinutesAsleep", 0) / 60, 1),
