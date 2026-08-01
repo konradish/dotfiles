@@ -1,0 +1,318 @@
+{
+  "providers": {
+    "litellm-local": {
+      "baseUrl": "http://litellm.localhost/v1",
+      "api": "openai-completions",
+      "apiKey": "change-me",
+      "compat": {
+        "supportsDeveloperRole": false,
+        "supportsReasoningEffort": false
+      },
+      "models": [
+        {
+          "id": "glm-5.2",
+          "name": "GLM 5.2 (crof.ai)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 1000000,
+          "maxTokens": 32768
+        },
+        {
+          "id": "kimi-k2.5-lightning",
+          "name": "Kimi K2.5 Lightning (crof.ai)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 131072,
+          "maxTokens": 16384
+        },
+        {
+          "id": "kimi-k2.6",
+          "name": "Kimi K2.6 (crof.ai)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 262144,
+          "maxTokens": 16384
+        },
+        {
+          "id": "kimi-k2.5",
+          "name": "Kimi K2.5 (crof.ai)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 262144,
+          "maxTokens": 16384
+        },
+        {
+          "id": "greg-2-ultra",
+          "name": "Greg 2 Ultra (crof.ai)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 229376,
+          "maxTokens": 16384
+        },
+        {
+          "id": "greg-2-super",
+          "name": "Greg 2 Super (crof.ai)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 229376,
+          "maxTokens": 16384
+        },
+        {
+          "id": "greg-1-mini",
+          "name": "Greg 1 Mini (crof.ai)",
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 229376,
+          "maxTokens": 16384
+        },
+        {
+          "id": "mimo-v2.5-pro",
+          "name": "MiMo-V2.5-Pro (crof.ai)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 1000000,
+          "maxTokens": 16384
+        },
+        {
+          "id": "qwen3.6-35b-a3b",
+          "name": "Qwen3.6 35B-A3B (local)",
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 262144,
+          "maxTokens": 32768,
+          "compat": {
+            "thinkingFormat": "qwen-chat-template"
+          }
+        },
+        {
+          "id": "qwen3.6-35b-a3b-fast",
+          "name": "Qwen3.6 35B-A3B fast (64K ctx, less offload)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 65536,
+          "maxTokens": 16384,
+          "compat": {
+            "thinkingFormat": "qwen-chat-template"
+          }
+        },
+        {
+          "id": "qwen3.6-14b-a3b",
+          "name": "Qwen3.6 14B-A3B FableVibes (community distill, local)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 65536,
+          "maxTokens": 16384,
+          "compat": {
+            "thinkingFormat": "qwen-chat-template"
+          }
+        },
+        {
+          "id": "ternary-bonsai-27b",
+          "name": "Ternary-Bonsai 27B (2-bit ternary quant, base Qwen3.6-27B, local)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 65536,
+          "maxTokens": 8192,
+          "compat": {
+            "thinkingFormat": "qwen-chat-template"
+          }
+        },
+        {
+          "id": "bonsai-27b-1bit",
+          "name": "Bonsai 27B (true 1-bit quant, base Qwen3.6-27B, local)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 65536,
+          "maxTokens": 8192,
+          "compat": {
+            "thinkingFormat": "qwen-chat-template"
+          }
+        },
+        {
+          "id": "qwen3.6-27b-dense",
+          "name": "Qwen3.6 27B dense (local)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 65536,
+          "maxTokens": 8192,
+          "compat": {
+            "thinkingFormat": "qwen-chat-template"
+          }
+        },
+        {
+          "id": "gemma4-26b-abliterated",
+          "name": "Gemma4 26B abliterated (local)",
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 131072,
+          "maxTokens": 16384
+        },
+        {
+          "id": "gemma4-12b",
+          "name": "Gemma4 12B dense Huihui-abliterated (local)",
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 65536,
+          "maxTokens": 4096
+        },
+        {
+          "id": "gemma4-12b-nothink",
+          "name": "Gemma4 12B dense Huihui-abliterated, no-think (local)",
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 65536,
+          "maxTokens": 4096
+        },
+        {
+          "id": "qwen3.5-9b-abliterated",
+          "name": "Qwen3.5 9B abliterated (local)",
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 131072,
+          "maxTokens": 16384,
+          "compat": {
+            "thinkingFormat": "qwen-chat-template"
+          }
+        },
+        {
+          "id": "gemma4-26b-a4b",
+          "name": "Gemma4 26B-A4B non-abliterated (local)",
+          "reasoning": false,
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 131072,
+          "maxTokens": 16384
+        },
+        {
+          "id": "mellum2-12b-thinking",
+          "name": "Mellum2 12B-A2.5B Thinking (local)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 65536,
+          "maxTokens": 16384
+        },
+        {
+          "id": "mellum2-12b-instruct",
+          "name": "Mellum2 12B-A2.5B Instruct (local)",
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 65536,
+          "maxTokens": 16384
+        },
+        {
+          "id": "gpt-oss-20b-abliterated",
+          "name": "gpt-oss 20B abliterated (local)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 32768,
+          "maxTokens": 16384
+        },
+        {
+          "id": "qwen3-coder-30b-a3b",
+          "name": "Qwen3-Coder 30B-A3B Instruct (local)",
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 262144,
+          "maxTokens": 16384
+        },
+        {
+          "id": "devstral-24b",
+          "name": "Devstral Small 2 24B Instruct (local)",
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 131072,
+          "maxTokens": 16384
+        },
+        {
+          "id": "gpt-oss-20b-stock",
+          "name": "gpt-oss 20B stock reasoning (local)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 32768,
+          "maxTokens": 16384
+        },
+        {
+          "id": "deepseek-v4-flash",
+          "name": "DeepSeek V4 Flash (crof.ai)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 1000000,
+          "maxTokens": 32768
+        }
+      ]
+    },
+    "google": {
+      "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
+      "api": "google-generative-ai",
+      "apiKey": "GEMINI_API_KEY",
+      "models": [
+        {
+          "id": "gemini-3.5-flash",
+          "name": "Gemini 3.5 Flash",
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 1048576,
+          "maxTokens": 65536
+        }
+      ]
+    }
+  }
+}

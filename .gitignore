@@ -1,0 +1,17 @@
+# This repo is PUBLIC. Nothing containing a credential may be committed.
+
+# pi agent: auth.json holds real Anthropic + Google API keys (mode 600).
+# Only models.json / settings.json are safe to track.
+pi/.pi/agent/auth.json
+pi/.pi/agent/sessions/
+pi/.pi/agent/*.bak-*
+
+# Generic credential shapes, in case a package is added carelessly later.
+**/.env
+**/*.pem
+**/*credentials*.json
+**/.netrc
+
+# Build noise
+**/__pycache__/
+*.pyc
