@@ -15,3 +15,11 @@ pi/.pi/agent/*.bak-*
 # Build noise
 **/__pycache__/
 *.pyc
+
+# ~/.local is stow-linked to bin/.local, so ANY tool installed to ~/.local/bin
+# lands inside this repo and shows up as a commit candidate. Text helper scripts
+# there are intentional; compiled binaries are not (gitleaks alone is 21MB).
+bin/.local/bin/gitleaks
+bin/.local/bin/*.bin
+bin/.local/lib/
+bin/.local/share/
