@@ -8,6 +8,11 @@ Backends:
 Select with --backend or HEALTH_BACKEND env var. Intraday subcommands
 (hr-intraday, steps-intraday, energy-intraday, dump) always use google —
 they are new capabilities of the v4 API.
+
+Every command stamps a top-level "source" on its JSON naming the API that
+produced it ("fitbit-web-v1" or "google-health-v4"). The two backends do not
+agree on wake-minutes, so a figure with no source is not safe to compare
+against a stored one.
 """
 
 import argparse
@@ -144,6 +149,24 @@ class GoogleHealth:
                 raise Exception(f"Google Health API {r.status_code} on {path}: {r.text[:300]}")
             return r.json() if r.text else {}
         return {}
+
+# ── Output provenance ───────────────────────────────────────────────
+
+# Which upstream API produced a payload. Stamped on every command's JSON so a
+# number can never be read without knowing which API produced it: the two
+# backends disagree on wake-minutes, so an unlabelled figure is not safe to
+# compare against yesterday's.
+SOURCE_NAMES = {"legacy": "fitbit-web-v1", "google": "google-health-v4"}
+
+def emit(result: dict, token):
+    """Print a command result with its producing API stamped on it.
+
+    Backend is read off the live client object, not off --backend, so the
+    google-only intraday commands still report google under --backend legacy.
+    """
+    src = SOURCE_NAMES["google" if isinstance(token, GoogleHealth) else "legacy"]
+    result.pop("source", None)
+    print(json.dumps({"source": src, **result}, indent=2))
 
 def _day_bounds_utc(date_str: str) -> tuple:
     """RFC3339 start/end of the local civil day, for rollUp Timestamp ranges."""
@@ -300,7 +323,7 @@ def cmd_today(token, args):
             "distance_km": act["distance_km"],
             "floors": act["floors"],
         }
-        print(json.dumps(result, indent=2))
+        emit(result, token)
         return
 
     _, data = api_request(f"/1/user/-/activities/date/{date}.json", token)
@@ -319,7 +342,7 @@ def cmd_today(token, args):
         "distance_km": _summary_distance_km(summary),
         "floors": summary.get("floors", 0),
     }
-    print(json.dumps(result, indent=2))
+    emit(result, token)
 
 def cmd_sleep(token, args):
     """Get sleep data."""
@@ -335,7 +358,7 @@ def cmd_sleep(token, args):
             "efficiency": None,  # not exposed by Google Health v4
             "stages": _stages_minutes(sleeps),
         }
-        print(json.dumps(result, indent=2))
+        emit(result, token)
         return
 
     _, data = api_request(f"/1.2/user/-/sleep/date/{date}.json", token)
@@ -354,7 +377,7 @@ def cmd_sleep(token, args):
             "wake": stages.get("wake", 0),
         },
     }
-    print(json.dumps(result, indent=2))
+    emit(result, token)
 
 def cmd_heart(token, args):
     """Get heart rate data."""
@@ -372,7 +395,7 @@ def cmd_heart(token, args):
                 "Peak": azm["peak"],
             },
         }
-        print(json.dumps(result, indent=2))
+        emit(result, token)
         return
 
     _, data = api_request(f"/1/user/-/activities/heart/date/{date}/1d.json", token)
@@ -384,7 +407,7 @@ def cmd_heart(token, args):
         "restingHeartRate": hr_data.get("restingHeartRate"),
         "zones": zones,
     }
-    print(json.dumps(result, indent=2))
+    emit(result, token)
 
 def cmd_weight(token, args):
     """Get weight log."""
@@ -397,14 +420,14 @@ def cmd_weight(token, args):
             v = {}
         kg = next((val for k, val in v.items() if "kilogram" in k.lower() or "kg" in k.lower()), None)
         if kg is not None:
-            print(json.dumps({
+            emit({
                 "date": date,
                 "weight_kg": kg,
                 "weight_lbs": round(float(kg) * 2.205, 1),
                 "bmi": None,
-            }, indent=2))
+            }, token)
         else:
-            print(json.dumps({"date": date, "message": "No weight logged"}, indent=2))
+            emit({"date": date, "message": "No weight logged"}, token)
         return
 
     _, data = api_request(f"/1/user/-/body/log/weight/date/{date}.json", token)
@@ -420,7 +443,7 @@ def cmd_weight(token, args):
         }
     else:
         result = {"date": date, "message": "No weight logged"}
-    print(json.dumps(result, indent=2))
+    emit(result, token)
 
 def cmd_summary(token, args):
     """Get combined daily summary."""
@@ -447,7 +470,7 @@ def cmd_summary(token, args):
                 "restingBPM": gh_rhr(gh, date),
             },
         }
-        print(json.dumps(result, indent=2))
+        emit(result, token)
         return
 
     _, activity = api_request(f"/1/user/-/activities/date/{date}.json", token)
@@ -474,7 +497,7 @@ def cmd_summary(token, args):
             "restingBPM": hr_data.get("restingHeartRate"),
         },
     }
-    print(json.dumps(result, indent=2))
+    emit(result, token)
 
 # ── Intraday commands (Google Health only) ─────────────────────────
 
@@ -509,36 +532,36 @@ def cmd_hr_intraday(gh: GoogleHealth, args):
     date = args.date or datetime.now().strftime("%Y-%m-%d")
     window = args.window or 60
     points = _hr_windows(gh, date, window)
-    print(json.dumps({
+    emit({
         "date": date,
         "window_seconds": window,
         "count": len(points),
         "points": points,
-    }, indent=2))
+    }, gh)
 
 def cmd_steps_intraday(gh: GoogleHealth, args):
     """Intraday step windows for one day."""
     date = args.date or datetime.now().strftime("%Y-%m-%d")
     window = args.window or 900
     points = [p for p in _steps_windows(gh, date, window) if p["steps"] > 0]
-    print(json.dumps({
+    emit({
         "date": date,
         "window_seconds": window,
         "count": len(points),
         "points": points,
-    }, indent=2))
+    }, gh)
 
 def cmd_energy_intraday(gh: GoogleHealth, args):
     """Intraday active-energy windows for one day."""
     date = args.date or datetime.now().strftime("%Y-%m-%d")
     window = args.window or 900
     points = [p for p in _energy_windows(gh, date, window) if p["kcal"] > 0]
-    print(json.dumps({
+    emit({
         "date": date,
         "window_seconds": window,
         "count": len(points),
         "points": points,
-    }, indent=2))
+    }, gh)
 
 def cmd_dump(gh: GoogleHealth, args):
     """Archive one full day of everything to a JSON file."""
@@ -554,7 +577,7 @@ def cmd_dump(gh: GoogleHealth, args):
     dump = {
         "date": date,
         "generated_at": datetime.now().astimezone().isoformat(),
-        "source": "google-health-v4",
+        "source": SOURCE_NAMES["google"],
         "daily": {
             "activity": gh_activity(gh, date),
             "active_zone_minutes": gh_azm(gh, date),
@@ -579,13 +602,13 @@ def cmd_dump(gh: GoogleHealth, args):
     }
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
     Path(out_path).write_text(json.dumps(dump, indent=2) + "\n")
-    print(json.dumps({
+    emit({
         "written": str(out_path),
         "date": date,
         "bytes": Path(out_path).stat().st_size,
         "intraday_hr_windows": len(dump["intraday"]["heart_rate_60s"]),
         "intraday_step_windows": len(dump["intraday"]["steps_900s"]),
-    }, indent=2))
+    }, gh)
 
 GOOGLE_ONLY_COMMANDS = {"hr-intraday", "steps-intraday", "energy-intraday", "dump"}
 
