@@ -211,10 +211,25 @@ def gh_list_date_metric(gh: GoogleHealth, data_type: str, member: str, date_str:
             return v
     return {}
 
+# Runaway guard, not a budget. The API ignores pageSize and returns ~13 points
+# per page, so the entire record (back to 2022-12) is roughly 65 pages -- this
+# sits far above any real request. Reaching it means something is wrong.
+SLEEP_PAGE_GUARD = 500
+
 def gh_sleep_points(gh: GoogleHealth, date_str: str) -> list:
-    """Sleep datapoints whose civil END date matches date_str (legacy semantics)."""
+    """Sleep datapoints whose civil END date matches date_str (legacy semantics).
+
+    Pages until the answer is DEFINITIVE: either we walk past date_str in the
+    newest-first list, or the record ends. An empty return therefore means "no
+    sleep was recorded that night" and nothing else.
+
+    Running out of pages raises instead of returning []. The old 5-page cap
+    silently reported zero deep/light/REM/wake for every date older than about
+    eight weeks -- a false zero and a real one are indistinguishable once they
+    reach a health log, so the two must not render the same way.
+    """
     matches, token, pages = [], None, 0
-    while pages < 5:
+    while pages < SLEEP_PAGE_GUARD:
         params = {"pageSize": 100}
         if token:
             params["pageToken"] = token
@@ -230,9 +245,12 @@ def gh_sleep_points(gh: GoogleHealth, date_str: str) -> list:
                 return matches  # list is newest-first; we've gone past the date
         token = resp.get("nextPageToken")
         if not token:
-            return matches
+            return matches  # walked the whole record; absence is real
         pages += 1
-    return matches
+    raise Exception(
+        f"sleep pagination hit the {SLEEP_PAGE_GUARD}-page guard without reaching "
+        f"{date_str}; refusing to report zero sleep for a date never looked at"
+    )
 
 def _stages_minutes(sleeps: list) -> dict:
     """Sum stage minutes across sleep points, in legacy key names."""
