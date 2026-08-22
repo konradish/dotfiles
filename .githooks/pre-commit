@@ -20,7 +20,12 @@ fi
 
 # --staged scans only what is about to be committed; --redact keeps the secret
 # itself out of the terminal and out of any scrollback or session transcript.
-if ! "$GITLEAKS" protect --staged --redact --no-banner; then
+# -c pins the CANONICAL base config (.gitleaks.toml at repo root) explicitly:
+# the trace-lake ingest scrub extends the same file, so both consumers provably
+# read one pattern source. Trace-only breadth lives in .gitleaks-traces.toml,
+# which this hook deliberately never loads.
+CFG="$(git rev-parse --show-toplevel)/.gitleaks.toml"
+if ! "$GITLEAKS" protect --staged --redact --no-banner -c "$CFG"; then
   echo >&2
   echo "pre-commit: BLOCKED — staged changes contain something credential-shaped." >&2
   echo "  Move it into Vaultwarden and reference it from a chezmoi template." >&2

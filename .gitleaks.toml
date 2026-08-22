@@ -1,0 +1,24 @@
+# Canonical gitleaks BASE config — SINGLE-HOMED, this file is the one source.
+#
+# Consumers (both read THESE bytes, never a copy):
+#   1. dotfiles .githooks/pre-commit  (gitleaks protect -c <this file>)
+#   2. data-estate scripts/load_lake_cc_traces.py trace-scrub pass, via
+#      .gitleaks-traces.toml which [extend]s this file.
+#
+# Trace-ONLY patterns (broad, over-redaction is cheap there but would be
+# false-positive friction on commits) go in .gitleaks-traces.toml, which the
+# pre-commit hook never reads. Rules HERE must be precise enough that a hit in
+# a staged diff is a real leak.
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "ducklake-env-cred"
+description = "Home-lake env credential (MinIO/Postgres 40-hex password assignment)"
+regex = '''(?i)(?:MINIO_ROOT_PASSWORD|PG_SUPER_PASSWORD|DUCKLAKE_PG_PASSWORD)\s*=\s*([a-f0-9]{40})'''
+
+[[rules]]
+id = "lakehouse-canary"
+description = "Planted-secret acceptance canary — exists ONLY in this base config, proving consumers point at it rather than holding a copy"
+regex = '''LAKECANARY_[A-F0-9]{32}'''

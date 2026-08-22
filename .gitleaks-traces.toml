@@ -1,0 +1,14 @@
+# Trace-scrub EXTENSION of the canonical gitleaks base config.
+#
+# Loaded ONLY by the Claude Code trace ingest
+# (data-estate scripts/load_lake_cc_traces.py). The dotfiles pre-commit hook
+# never reads this file — rules here may be broad (over-redaction in the trace
+# lake is cheap; the same breadth would be false-positive friction on commits).
+
+[extend]
+path = "/home/kodell/dotfiles/.gitleaks.toml"
+
+[[rules]]
+id = "trace-env-assignment"
+description = "Broad env-style credential assignment (trace scrub only)"
+regex = '''(?i)\b[A-Z0-9_]{2,48}(?:TOKEN|SECRET|PASSWORD|PASSWD|APIKEY|API_KEY|ACCESS_KEY|PRIVATE_KEY)\s*[=:]\s*['"]?([A-Za-z0-9+/_.=-]{12,})'''
