@@ -1,0 +1,113 @@
+#!/bin/bash
+# blender-live <file.blend> <port> [--kill-existing]
+#
+# Launch a GUI Blender (Windows-native) on a .blend and bring up the blender-mcp addon server on <port>,
+# LOUDLY. Exits 0 only after a real protocol ping on the port succeeds. Every failure prints why.
+#
+# Why this exists: the addon auto-starts its server in register(), before the .blend loads, on the
+# startup scene's default port 9876. A second Blender then fails that bind silently and nothing retries.
+# Two live Blenders need two ports: blender-live ~/src/IndianCreekApartments/blender/primrose.blend 9876
+#                                   blender-live ~/src/tandy-center-3d/blender/tandy-subway.blend 9877
+set -u
+BLEND=${1:?usage: blender-live <file.blend> <port> [--kill-existing]}
+PORT=${2:?usage: blender-live <file.blend> <port> [--kill-existing]}
+KILL=${3:-}
+BLENDER="/mnt/c/Program Files/Blender Foundation/Blender 5.2/blender.exe"
+UV=/mnt/c/Users/konra/.local/bin/uv.exe
+LOGDIR=${XDG_RUNTIME_DIR:-/tmp}/blender-live; mkdir -p "$LOGDIR"
+LOG="$LOGDIR/port-$PORT.log"
+
+die() { echo "blender-live: ERROR: $*" >&2; exit 1; }
+
+[ -f "$BLEND" ] || die "no such file: $BLEND"
+[ -x "$BLENDER" ] || die "blender.exe not found at $BLENDER"
+UNC=$(wslpath -w "$(readlink -f "$BLEND")") || die "wslpath failed for $BLEND"
+STEM=$(basename "$BLEND" .blend)
+
+# Windows-side python: the addon binds Windows-localhost only, so every probe must run on that side.
+wpy() { "$UV" run --no-project python - "$@" 2>/dev/null | tr -d "\r"; }
+
+port_probe() {   # -> "free" | "listening:noresp" | "listening:<basename of the .blend that answered>"
+  wpy "$PORT" <<'PYEOF'
+import socket, sys, json
+port = int(sys.argv[1])
+try:
+    s = socket.create_connection(("127.0.0.1", port), timeout=2)
+except OSError:
+    print("free"); sys.exit(0)
+try:
+    s.settimeout(10)
+    code = "import bpy, os; print('FILE=' + os.path.basename(bpy.data.filepath))"
+    s.sendall(json.dumps({"type": "execute_code", "params": {"code": code}}).encode())
+    buf = b""
+    while True:
+        c = s.recv(65536)
+        if not c: break
+        buf += c
+        try: json.loads(buf.decode()); break
+        except ValueError: continue
+    out = json.loads(buf.decode()).get("result", {}).get("result", "")
+    name = out.split("FILE=", 1)[1].strip() if "FILE=" in out else "unknown"
+    print("listening:" + (name or "untitled"))
+except Exception:
+    print("listening:noresp")
+PYEOF
+}
+
+blender_windows() {   # pid + title of every Blender window
+  powershell.exe -NoProfile -Command "Get-Process blender -ErrorAction SilentlyContinue | ForEach-Object { \"\$(\$_.Id) \$(\$_.MainWindowTitle)\" }" 2>/dev/null | tr -d '\r'
+}
+
+# 1. port must be free, or we say exactly who holds it
+state=$(port_probe)
+if [ "$state" != "free" ]; then
+  echo "blender-live: port $PORT is already in use ($state). Blender windows:" >&2
+  blender_windows | sed 's/^/    /' >&2
+  if [ "$KILL" = "--kill-existing" ]; then
+    pid=$(blender_windows | grep -F "$STEM" | awk '{print $1}' | head -1)
+    [ -n "$pid" ] || die "--kill-existing: no Blender window titled '$STEM' to kill; refusing to guess"
+    echo "blender-live: killing Blender pid $pid ($STEM)" >&2
+    powershell.exe -NoProfile -Command "Stop-Process -Id $pid -Force" >/dev/null 2>&1; sleep 2
+    [ "$(port_probe)" = "free" ] || die "port $PORT still busy after killing pid $pid"
+  else
+    die "pick another port, or re-run with --kill-existing to replace the Blender showing '$STEM'"
+  fi
+fi
+
+# 2. launch; the --python-expr runs AFTER the file loads and starts the server on OUR port, and it
+#    writes a status line to stdout so the log says what happened even if the port never opens.
+EXPR="import bpy
+s = bpy.context.scene
+try:
+    # register() already auto-started a server on the STARTUP scene's port (9876); on Windows a second
+    # bind to a busy port SUCCEEDS (SO_REUSEADDR), so it never errors - stop it, then start on ours.
+    if getattr(getattr(bpy.types, 'blendermcp_server', None), 'running', False):
+        bpy.ops.blendermcp.stop_server()
+    s.blendermcp_port = $PORT
+    r = bpy.ops.blendermcp.start_server()
+    srv = getattr(bpy.types, 'blendermcp_server', None)
+    print('BLENDER-LIVE start_server ->', r, 'running=', getattr(srv, 'running', None), 'port=', getattr(srv, 'port', None), flush=True)
+except Exception as e:
+    print('BLENDER-LIVE start_server FAILED:', repr(e), flush=True)"
+: > "$LOG"
+nohup "$BLENDER" "$UNC" --python-expr "$EXPR" >"$LOG" 2>&1 &
+BPID=$!
+echo "blender-live: launched '$STEM' (wsl pid $BPID), log $LOG"
+
+# 3. wait for a real protocol pong on the port (not just a TCP accept)
+for i in $(seq 1 40); do
+  sleep 1.5
+  st=$(port_probe)
+  if [ "$st" = "listening:$STEM.blend" ]; then
+    echo "blender-live: READY  $STEM  port $PORT  ($(blender_windows | grep -F "$STEM" | awk '{print "win pid "$1}' | head -1))"
+    grep "BLENDER-LIVE" "$LOG" | tail -1
+    exit 0
+  fi
+  if ! kill -0 "$BPID" 2>/dev/null && [ "$st" = "free" ]; then
+    echo "blender-live: ERROR: Blender exited before the server came up. Log tail:" >&2; tail -20 "$LOG" >&2; exit 1
+  fi
+done
+echo "blender-live: ERROR: port $PORT did not answer as '$STEM.blend' within 60s (state: $(port_probe)). Log tail:" >&2
+tail -20 "$LOG" >&2
+grep -q "Failed to start server\|Address already in use\|10048" "$LOG" && echo "blender-live: -> bind failed on $PORT; another process holds it" >&2
+exit 1

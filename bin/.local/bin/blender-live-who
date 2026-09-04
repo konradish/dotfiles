@@ -1,0 +1,28 @@
+#!/bin/bash
+# blender-live-who [port ...]  -> which .blend answers on each blender-mcp port (default 9876 9877)
+UV=/mnt/c/Users/konra/.local/bin/uv.exe
+for P in "${@:-9876 9877}"; do
+  for p in $P; do
+    "$UV" run --no-project python - "$p" 2>/dev/null <<'PYEOF' | tr -d '\r'
+import socket, sys, json
+p = int(sys.argv[1])
+try:
+    s = socket.create_connection(("127.0.0.1", p), timeout=2)
+except OSError:
+    print(p, "-> free"); sys.exit(0)
+try:
+    s.settimeout(10)
+    s.sendall(json.dumps({"type": "execute_code", "params": {"code": "import bpy, os; print(os.path.basename(bpy.data.filepath) or '(untitled)', len(bpy.data.objects), 'objects')"}}).encode())
+    buf = b""
+    while True:
+        c = s.recv(65536)
+        if not c: break
+        buf += c
+        try: d = json.loads(buf.decode()); break
+        except ValueError: continue
+    print(p, "->", d.get("result", {}).get("result", "").strip() or d)
+except Exception as e:
+    print(p, "-> listening but no answer:", e)
+PYEOF
+  done
+done
