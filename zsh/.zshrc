@@ -23,7 +23,6 @@ export ZSH="$HOME/.oh-my-zsh"
 # See https://github.com/ohmyzsh/ohmyzsh/wiki/Themes
 ZSH_THEME="powerlevel10k/powerlevel10k"
 
-
 # Set list of themes to pick from when loading at random
 # Setting this variable when ZSH_THEME=random will cause zsh to load
 # a theme from this variable instead of looking in $ZSH/themes/
@@ -123,12 +122,10 @@ alias sgpt='uvx --from shell-gpt sgpt'
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh.
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 
-
 # AUTOCOMPLETION
 
-# initialize autocompletion
-autoload -U compinit
-compinit
+# compinit is owned by zsh-snap (sourced at the top): it stubs compinit and runs
+# the real one once, deferred to the first precmd. A bare call here was a no-op.
 
 # history setup
 setopt APPEND_HISTORY
@@ -139,7 +136,6 @@ HISTSIZE=999
 setopt HIST_EXPIRE_DUPS_FIRST
 setopt EXTENDED_HISTORY
 
-
 [ -f ~/.fzf.zsh ] && source ~/.fzf.zsh
 
 source ~/.zsh_profile
@@ -149,11 +145,33 @@ export BUN_INSTALL="/home/kodell/.bun"
 export PATH="$BUN_INSTALL/bin:$PATH"
 
 export NVM_DIR="$HOME/.config/nvm"
-[ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
-[ -s "$NVM_DIR/bash_completion" ] && \. "$NVM_DIR/bash_completion"  # This loads nvm bash_completion
+# nvm.sh cost ~120 ms per shell (90% of startup, measured 2026-09-06). Put the
+# default node on PATH directly; load nvm itself only when `nvm` is first run.
+if [ -s "$NVM_DIR/nvm.sh" ]; then
+  _nvm_bin=("$NVM_DIR"/versions/node/v$(<"$NVM_DIR/alias/default")/bin(N) "$NVM_DIR"/versions/node/*/bin(Nn[-1]))
+  [[ -n $_nvm_bin[1] ]] && export PATH="$_nvm_bin[1]:$PATH"
+  unset _nvm_bin
+  nvm() { unfunction nvm; \. "$NVM_DIR/nvm.sh"; nvm "$@"; }
+fi
 
 . "$HOME/.local/share/../bin/env"
-# Load secrets from shared location
-if [ -f "/mnt/c/dev/secrets/.secrets.env" ]; then
-    source "/mnt/c/dev/secrets/.secrets.env"
+# Load secrets (kept OUT of this public repo)
+if [ -f "$HOME/.secrets.env" ]; then
+    source "$HOME/.secrets.env"
 fi
+
+# Lazy load GITHUB_TOKEN to avoid console output during instant prompt.
+# Nested shells (tmux panes, Claude's Bash tool) inherit it; skip the ~30 ms gh call.
+[[ -n "${GITHUB_TOKEN:-}" ]] || export GITHUB_TOKEN="$(gh auth token 2>/dev/null || echo '')"
+# Claude yolo mode alias
+alias cy='ANTHROPIC_API_KEY= /home/kodell/.local/bin/claude --dangerously-skip-permissions'
+export LITELLM_MASTER_KEY=change-me
+
+update_cc() {
+  claude update
+}
+
+# Google AI / Gemini API (aistudio.google.com)
+
+# Perplexity API (perplexity.ai)
+

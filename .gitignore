@@ -23,3 +23,6 @@ bin/.local/bin/gitleaks
 bin/.local/bin/*.bin
 bin/.local/lib/
 bin/.local/share/
+
+# 7.3 GB nvm/node tree (~/.config/nvm symlinks here). Never commit; repo is public.
+nvim.backup.*/
