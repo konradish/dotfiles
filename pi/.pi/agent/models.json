@@ -123,7 +123,7 @@
           "input": [
             "text"
           ],
-          "contextWindow": 65536,
+          "contextWindow": 131072,
           "maxTokens": 16384,
           "compat": {
             "thinkingFormat": "qwen-chat-template"
@@ -293,6 +293,88 @@
           ],
           "contextWindow": 1000000,
           "maxTokens": 32768
+        },
+        {
+          "id": "deepseek-v4-pro",
+          "name": "DeepSeek V4 Pro 0813 GA (DeepSeek direct)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 1000000,
+          "maxTokens": 32768
+        },
+        {
+          "id": "deepseek-v4-flash-0731",
+          "name": "DeepSeek V4 Flash 0731 (crof.ai)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 1000000,
+          "maxTokens": 32768
+        },
+        {
+          "id": "crof-deepseek-v4-pro-0425",
+          "name": "DeepSeek V4 Pro 0425 preview (crof.ai, STALE - bench arm only)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 1000000,
+          "maxTokens": 32768
+        },
+        {
+          "id": "or-deepseek-v4-flash-0731",
+          "name": "DeepSeek V4 Flash 0731 (OpenRouter)",
+          "reasoning": true,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 1000000,
+          "maxTokens": 32768
+        },
+        {
+          "id": "qwen3.8-27b",
+          "name": "Qwen3.8 27B dense IQ3_XXS (local)",
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 65536,
+          "maxTokens": 16384,
+          "compat": {
+            "thinkingFormat": "qwen-chat-template"
+          }
+        },
+        {
+          "id": "qwen3.8-27b-iq3s",
+          "name": "Qwen3.8 27B dense iq3s (local)",
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 65536,
+          "maxTokens": 16384,
+          "compat": {
+            "thinkingFormat": "qwen-chat-template"
+          }
+        },
+        {
+          "id": "qwen3.8-27b-iq2xxs",
+          "name": "Qwen3.8 27B dense IQ2_XXS old default (local)",
+          "reasoning": true,
+          "input": [
+            "text",
+            "image"
+          ],
+          "contextWindow": 65536,
+          "maxTokens": 16384,
+          "compat": {
+            "thinkingFormat": "qwen-chat-template"
+          }
         }
       ]
     },
