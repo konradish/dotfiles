@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# sys-pause -- cleanly stop Docker (and optionally networking) so the box can be
+# suspended, re-cabled, or left dark, then brought back with `sys-resume`.
+#
+# Usage: sys-pause [--docker-only] [--net-only]
+#
+# What it does, in order:
+#   1. records which containers are running -> ~/.cache/sys-pause/state
+#   2. `systemctl stop docker.socket docker`   (NOT reload: reload strips GPU
+#      device access from running containers on this cgroup-v2 box)
+#   3. `nmcli networking off`                  (skipped with --docker-only)
+#
+# Stopping the daemon does not count as a manual `docker stop`, so every
+# `restart: unless-stopped` container comes back on `systemctl start docker`.
+# `docker pause` is deliberately NOT used: frozen processes keep TCP sockets
+# that die underneath them, and not every app reconnects.
+#
+# Run from a local terminal (`! sys-pause` in Claude Code): the network half
+# cuts any remote session, including Claude's.
+set -euo pipefail
+
+DOCKER=1; NET=1
+for a in "$@"; do
+  case "$a" in
+    --docker-only) NET=0 ;;
+    --net-only) DOCKER=0 ;;
+    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+    *) echo "unknown arg: $a" >&2; exit 2 ;;
+  esac
+done
+
+STATE_DIR="$HOME/.cache/sys-pause"; mkdir -p "$STATE_DIR"
+STATE="$STATE_DIR/state"
+
+ts() { date '+%F %T'; }
+
+if [ "$DOCKER" = 1 ]; then
+  {
+    echo "paused_at=$(ts)"
+    echo "containers=$(docker ps --format '{{.Names}}' | sort | tr '\n' ' ')"
+  } > "$STATE"
+  echo "[$(ts)] recorded $(docker ps -q | wc -l) running containers -> $STATE"
+  echo "[$(ts)] stopping docker (socket + service; containers get up to the daemon's shutdown-timeout)"
+  sudo -n systemctl stop docker.socket docker
+  echo "[$(ts)] docker stopped: $(systemctl is-active docker || true)"
+else
+  [ -f "$STATE" ] || echo "paused_at=$(ts)" > "$STATE"
+fi
+
+if [ "$NET" = 1 ]; then
+  echo "[$(ts)] networking off (nmcli)"
+  nmcli networking off
+  echo "net_off=1" >> "$STATE"
+  echo "[$(ts)] networking is $(nmcli networking 2>/dev/null || echo unknown)"
+fi
+
+echo "[$(ts)] paused. Resume with: sys-resume"
