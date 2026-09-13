@@ -73,7 +73,7 @@ This is a personal dotfiles and shell configuration repository with the followin
 ## Environment Details
 
 ### System Information
-- **Host**: koni9 (Debian 13 bookworm/trixie, bare-metal Linux — migrated off WSL2 September 2026)
+- **Host**: koni9 (Debian 13 trixie, bare-metal Linux, not WSL)
 - **Kernel**: Linux 6.12.107+deb13-amd64
 - **Working Directory**: repos live under `~/src/<name>` (ext4). No `/mnt/c` on this box.
 
@@ -84,14 +84,7 @@ This is a personal dotfiles and shell configuration repository with the followin
 - **Containers**: docker, `docker compose` (plugin, not standalone `docker-compose`)
 - **Utilities**: jq, npx
 
-### Critical Caveats
-- **No WSL boundary anymore**: browser control, port access, clipboard, etc. all work directly — no more "can't click links from the terminal" workaround.
-
 ## Security Guidelines
 
 ### Git Security Checks
-Before any git commit or git push command, you MUST perform the following checks:
-- Run `git diff --cached` to review the staged changes
-- Search the diff for any hardcoded secrets, API keys, client IDs, or private URLs
-- Ensure any sensitive data is loaded from gitignored .env files or platform secrets, with only placeholder values in committed .env.example files
-- If any secrets are found, you MUST refuse to commit and instead fix the code to load them securely
+Before committing or pushing, review `git diff --cached` for hardcoded secrets, API keys, client IDs, or private URLs. Sensitive values load from gitignored `.env` files or platform secrets; committed `.env.example` files hold placeholders only. If a secret is staged, don't commit — fix the code to load it securely first.
