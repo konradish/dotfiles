@@ -1,0 +1,13 @@
+#!/bin/bash
+# cy: Claude headless, no API key (uses OAuth)
+# Runs in whatever directory you launch it from -- no implicit cd.
+unset ANTHROPIC_API_KEY
+unset CLAUDECODE
+export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+# Interactive sessions get Claude in Chrome; headless (-p/--print) runs don't,
+# so parallel workers never fight over the one browser.
+chrome=(--chrome)
+for a in "$@"; do
+  case "$a" in -p|--print|--no-chrome) chrome=() ;; esac
+done
+exec ~/.local/bin/claude --dangerously-skip-permissions "${chrome[@]}" "$@"
