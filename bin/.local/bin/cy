@@ -4,10 +4,10 @@
 unset ANTHROPIC_API_KEY
 unset CLAUDECODE
 export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
-# Interactive sessions get Claude in Chrome; headless (-p/--print) runs don't,
-# so parallel workers never fight over the one browser.
+# Claude in Chrome on for every run (each session gets its own tab group);
+# pass --no-chrome to opt out.
 chrome=(--chrome)
 for a in "$@"; do
-  case "$a" in -p|--print|--no-chrome) chrome=() ;; esac
+  [ "$a" = --no-chrome ] && chrome=()
 done
 exec ~/.local/bin/claude --dangerously-skip-permissions "${chrome[@]}" "$@"
