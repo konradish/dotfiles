@@ -1,0 +1,93 @@
+#!/bin/bash
+# qtab-cy: open a new tab in the running QTerminal window and start `cy`
+# (Claude Code, --dangerously-skip-permissions) with a prompt, so a hand-off
+# lands in front of Konrad as a live interactive session.
+#
+# Usage:
+#   qtab-cy [--model M] [--dir D] [--dry-run] "prompt text"
+#   qtab-cy [--model M] [--dir D] [--dry-run] --prompt-file FILE
+#   echo "prompt" | qtab-cy [--model M] [--dir D] -
+#
+#   --model M     passed through to claude --model (opus, sonnet, haiku, or a full id).
+#                 Omit to use the saved default model.
+#   --dir D       working directory for the session (default: current directory)
+#   --dry-run     print what would run; open nothing
+#
+# When claude exits the tab drops to an interactive zsh instead of closing.
+# Prints the D-Bus tab path on success (close it with:
+#   gdbus call --session --dest <svc> --object-path <tab> --method org.lxqt.QTerminal.Tab.closeTab)
+#
+# D-Bus contract (QTerminal 2.1, src/terminalconfig.cpp): newTab takes a{sv} with
+#   workingDirectory -> string
+#   shell            -> LIST of strings (argv). A plain string is silently ignored
+#                       and the tab opens the default shell instead.
+set -euo pipefail
+
+model="" dir="$PWD" dry=0 prompt="" prompt_file=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --model) model="${2:?--model needs a value}"; shift 2 ;;
+    --dir) dir="${2:?--dir needs a value}"; shift 2 ;;
+    --prompt-file) prompt_file="${2:?--prompt-file needs a value}"; shift 2 ;;
+    --dry-run) dry=1; shift ;;
+    -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
+    -) prompt="$(cat)"; shift ;;
+    --*) echo "qtab-cy: unknown option $1" >&2; exit 2 ;;
+    *) prompt="$1"; shift ;;
+  esac
+done
+
+if [ -n "$prompt_file" ]; then
+  [ -r "$prompt_file" ] || { echo "qtab-cy: cannot read $prompt_file" >&2; exit 2; }
+  prompt="$(cat "$prompt_file")"
+fi
+[ -n "$prompt" ] || { echo "qtab-cy: no prompt given" >&2; exit 2; }
+[ -d "$dir" ] || { echo "qtab-cy: no such directory $dir" >&2; exit 2; }
+dir="$(cd "$dir" && pwd)"
+
+# Each launch gets its own prompt file + launcher, so concurrent launches don't collide.
+state="${XDG_CACHE_HOME:-$HOME/.cache}/qtab-cy"
+mkdir -p "$state"
+id="$(date +%Y%m%d-%H%M%S)-$$"
+pfile="$state/$id.prompt.md"
+launcher="$state/$id.sh"
+printf '%s\n' "$prompt" > "$pfile"
+
+model_arg=""
+[ -n "$model" ] && model_arg="--model $(printf '%q' "$model")"
+cat > "$launcher" <<EOF
+#!/bin/zsh -i
+cd $(printf '%q' "$dir")
+$HOME/.local/bin/cy $model_arg "\$(cat $(printf '%q' "$pfile"))"
+exec zsh -i
+EOF
+chmod +x "$launcher"
+
+svc="$(gdbus call --session --dest org.freedesktop.DBus --object-path /org/freedesktop/DBus \
+        --method org.freedesktop.DBus.ListNames | grep -o "org\.lxqt\.QTerminal-[0-9]*" | head -1 || true)"
+if [ -z "$svc" ]; then
+  echo "qtab-cy: no running QTerminal on the session bus (start qterminal first)" >&2
+  exit 1
+fi
+win="$(gdbus call --session --dest "$svc" --object-path / \
+        --method org.lxqt.QTerminal.Process.getActiveWindow | grep -o "/windows/[0-9a-f]*" || true)"
+if [ -z "$win" ]; then
+  win="$(gdbus call --session --dest "$svc" --object-path / \
+          --method org.lxqt.QTerminal.Process.getWindows | grep -o "/windows/[0-9a-f]*" | head -1 || true)"
+fi
+[ -n "$win" ] || { echo "qtab-cy: $svc has no windows" >&2; exit 1; }
+
+args="{'workingDirectory': <'$dir'>, 'shell': <['$launcher']>}"
+if [ "$dry" = 1 ]; then
+  echo "service:  $svc"
+  echo "window:   $win"
+  echo "args:     $args"
+  echo "launcher: $launcher"
+  cat "$launcher"
+  rm -f "$launcher" "$pfile"
+  exit 0
+fi
+
+tab="$(gdbus call --session --dest "$svc" --object-path "$win" \
+        --method org.lxqt.QTerminal.Window.newTab "$args" | grep -o "/tabs/[0-9a-f]*")"
+echo "$svc $tab"
