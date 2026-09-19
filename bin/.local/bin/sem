@@ -1,0 +1,16 @@
+#!/bin/bash
+# Semantic search in Obsidian vault (semtools 3.0.1)
+source "$HOME/.cargo/env" 2>/dev/null
+
+query="$1"
+shift
+top_k="${1:-5}"
+
+VAULT="/home/kodell/ObsidianNotes"
+# Serialize: parallel semtools runs corrupt the shared lance index. Wait (up to 5 min) instead of racing.
+exec 9>"${XDG_RUNTIME_DIR:-/tmp}/sem.lock"
+flock -w 300 9 || { echo "sem: another sem run held the lock for 5 min; giving up" >&2; exit 75; }
+rg --files --glob '*.md' \
+  "$VAULT/Resources" "$VAULT/Areas" "$VAULT/Projects" "$VAULT/Inbox" "$VAULT/Parents" \
+  2>/dev/null | \
+  xargs -d'\n' semtools search -w obsidian "$query" --top-k "$top_k" 2>/dev/null
