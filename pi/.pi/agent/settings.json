@@ -1,12 +1,16 @@
 {
   "defaultProvider": "litellm-local",
-  "defaultModel": "qwen3.6-35b-a3b-fast",
+  "defaultModel": "bonsai2-daily",
   "enabledModels": [
-    "qwen3.6-35b-a3b-fast",
-    "qwen3.6-35b-a3b",
-    "gemma4-26b-abliterated",
-    "gemini-3.5-flash",
-    "claude-opus-4-7",
-    "claude-sonnet-4-5"
-  ]
+    "litellm-local/bonsai2-daily",
+    "litellm-local/qwen3.6-35b-a3b-fast",
+    "litellm-local/qwen3.6-35b-a3b",
+    "openrouter/deepseek/deepseek-v4-pro-0813",
+    "openrouter/deepseek/deepseek-v4.1-flash",
+    "openrouter/anthropic/claude-fable-5",
+    "cerebras/qwen-3.8-27b",
+    "google/gemini-3.8-flash"
+  ],
+  "lastChangelogVersion": "0.84.1",
+  "theme": "dark"
 }
