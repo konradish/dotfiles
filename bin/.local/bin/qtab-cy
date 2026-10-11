@@ -56,10 +56,11 @@ printf '%s\n' "$prompt" > "$pfile"
 model_arg=""
 [ -n "$model" ] && model_arg="--model $(printf '%q' "$model")"
 cat > "$launcher" <<EOF
-#!/bin/zsh -i
+#!/bin/bash
+# bash, not "zsh -i": an interactive zsh launcher hangs on oh-my-zsh's "update? [Y/n]" prompt.
+export DISABLE_AUTO_UPDATE=true
 cd $(printf '%q' "$dir")
-$HOME/.local/bin/cy $model_arg "\$(cat $(printf '%q' "$pfile"))"
-exec zsh -i
+exec zsh -ic '\$HOME/.local/bin/cy $model_arg "\$(cat $(printf '%q' "$pfile"))"; exec zsh -i'
 EOF
 chmod +x "$launcher"
 
