@@ -3,6 +3,9 @@
 # Runs in whatever directory you launch it from -- no implicit cd.
 unset ANTHROPIC_API_KEY
 unset CLAUDECODE
+# A terminal spawned by a Claude session passes this down; with it set the
+# session saves no transcript.
+unset CLAUDE_CODE_CHILD_SESSION
 export CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
 # Claude in Chrome on for every run (each session gets its own tab group);
 # pass --no-chrome to opt out.
