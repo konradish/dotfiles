@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+exec uv run --no-project /home/kodell/src/infra/rmq/rmq.py "$@"
