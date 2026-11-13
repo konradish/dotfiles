@@ -175,3 +175,9 @@ update_cc() {
 
 # Perplexity API (perplexity.ai)
 
+
+# pgrep/pkill -f match their own shell's command line when the pattern is not anchored, so an
+# agent's `pkill -f name` kills the shell that ran it. -A (procps 4.0.4) ignores ancestors.
+# These two lines replaced ~/.claude/hooks/pkill-self-match-guard.sh on 2026-11-13.
+alias pgrep='pgrep -A'
+alias pkill='pkill -A'
