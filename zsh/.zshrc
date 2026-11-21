@@ -164,7 +164,9 @@ fi
 # Nested shells (tmux panes, Claude's Bash tool) inherit it; skip the ~30 ms gh call.
 [[ -n "${GITHUB_TOKEN:-}" ]] || export GITHUB_TOKEN="$(gh auth token 2>/dev/null || echo '')"
 # Claude yolo mode alias
-alias cy='ANTHROPIC_API_KEY= /home/kodell/.local/bin/claude --dangerously-skip-permissions --chrome'
+alias cy='ANTHROPIC_API_KEY= /home/kodell/.local/bin/claude --dangerously-skip-permissions --chrome --settings /home/kodell/.claude/sandbox-interactive.json'
+# cy without the Bash sandbox (off switch for the line above)
+alias cy-nosandbox='ANTHROPIC_API_KEY= /home/kodell/.local/bin/claude --dangerously-skip-permissions --chrome'
 export LITELLM_MASTER_KEY=change-me
 
 update_cc() {
